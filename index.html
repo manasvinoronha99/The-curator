@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Commute - An Interactive Narrative</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="active">
+        <div class="loading-content">
+            <h1>The Commute</h1>
+            <p>A story about small choices on a late-night train</p>
+            <button id="start-btn" class="choice-btn">Begin</button>
+        </div>
+    </div>
+
+    <!-- Main Scene Container -->
+    <div id="scene-container">
+        <!-- Train Window Layer -->
+        <div id="train-window" class="layer">
+            <div class="window-frame">
+                <div class="window-reflection" id="reflection"></div>
+                <div class="outside-view" id="outside-view">
+                    <div class="cityscape"></div>
+                    <div class="tunnel-overlay" id="tunnel"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Train Interior Layer -->
+        <div id="train-interior" class="layer">
+            <div class="ceiling-lights">
+                <div class="light"></div>
+                <div class="light"></div>
+                <div class="light"></div>
+                <div class="light"></div>
+            </div>
+
+            <!-- Passengers -->
+            <div class="passenger-container">
+                <div class="passenger" id="passenger-1" data-passenger="1">
+                    <div class="passenger-silhouette"></div>
+                    <div class="passenger-detail hidden"></div>
+                </div>
+                <div class="passenger" id="passenger-2" data-passenger="2">
+                    <div class="passenger-silhouette"></div>
+                    <div class="passenger-detail hidden"></div>
+                </div>
+                <div class="passenger" id="passenger-3" data-passenger="3">
+                    <div class="passenger-silhouette"></div>
+                    <div class="passenger-detail hidden"></div>
+                </div>
+            </div>
+
+            <!-- Phone Interface -->
+            <div id="phone-view" class="hidden">
+                <div class="phone-screen">
+                    <div class="phone-content">
+                        <p>Scrolling through familiar faces...</p>
+                        <p>Nothing new.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gaze Control -->
+        <div id="gaze-control">
+            <button class="gaze-btn" data-gaze="window" title="Look at window">
+                <svg width="30" height="30" viewBox="0 0 30 30">
+                    <rect x="5" y="5" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"/>
+                    <line x1="15" y1="5" x2="15" y2="25" stroke="currentColor" stroke-width="2"/>
+                </svg>
+            </button>
+            <button class="gaze-btn" data-gaze="passengers" title="Look at passengers">
+                <svg width="30" height="30" viewBox="0 0 30 30">
+                    <circle cx="15" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    <path d="M 7 25 Q 15 20 23 25" fill="none" stroke="currentColor" stroke-width="2"/>
+                </svg>
+            </button>
+            <button class="gaze-btn" data-gaze="phone" title="Look at phone">
+                <svg width="30" height="30" viewBox="0 0 30 30">
+                    <rect x="8" y="5" width="14" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                    <line x1="12" y1="22" x2="18" y2="22" stroke="currentColor" stroke-width="2"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Narrative Text -->
+        <div id="narrative-text">
+            <p id="story-text"></p>
+        </div>
+
+        <!-- Choice Interface -->
+        <div id="choice-interface" class="hidden">
+            <div id="choices-container"></div>
+        </div>
+
+        <!-- Audio Control -->
+        <button id="audio-toggle" class="audio-btn" title="Toggle sound">
+            <svg id="audio-icon" width="24" height="24" viewBox="0 0 24 24">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="currentColor"/>
+            </svg>
+        </button>
+
+        <!-- Emotional State Indicator -->
+        <div id="emotion-indicator">
+            <div class="emotion-bar" id="connection-bar">
+                <span>Connection</span>
+                <div class="bar-fill"></div>
+            </div>
+            <div class="emotion-bar" id="isolation-bar">
+                <span>Isolation</span>
+                <div class="bar-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ending Screen -->
+    <div id="ending-screen" class="hidden">
+        <div class="ending-content">
+            <h2 id="ending-title"></h2>
+            <p id="ending-text"></p>
+            <button id="restart-btn" class="choice-btn">Experience Again</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
