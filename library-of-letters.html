@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Library of Letters</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: 'Georgia', serif;
+            background: #0a0e1a;
+        }
+
+        #canvas {
+            display: block;
+            cursor: default;
+        }
+
+        #textOverlay {
+            position: absolute;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            max-width: 420px;
+            padding: 22px;
+            background: rgba(18, 22, 32, 0.92);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            color: #c5d0e0;
+            font-size: 14px;
+            line-height: 1.7;
+            pointer-events: none;
+            border: 1px solid rgba(100, 120, 140, 0.2);
+        }
+
+        #textOverlay.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        #textOverlay.visible * {
+            pointer-events: all;
+        }
+
+        .narrative-text {
+            margin-bottom: 15px;
+            font-style: italic;
+            color: #d8e0ed;
+        }
+
+        .question {
+            margin-top: 12px;
+            margin-bottom: 16px;
+            font-weight: 500;
+            color: #e5ecf5;
+        }
+
+        .responses {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .response-option {
+            padding: 13px 17px;
+            background: rgba(35, 45, 60, 0.7);
+            border: 1px solid rgba(110, 130, 155, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #d0dce8;
+            font-size: 13px;
+        }
+
+        .response-option:hover {
+            background: rgba(45, 60, 80, 0.9);
+            border-color: rgba(130, 150, 175, 0.5);
+            transform: translateX(5px);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="textOverlay">
+        <div class="narrative-text" id="narrativeText"></div>
+        <div class="question" id="questionText"></div>
+        <div class="responses" id="responsesContainer"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const textOverlay = document.getElementById('textOverlay');
+
+        // Canvas setup
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Game state
+        let environmentBrightness = 0.15;
+        let positiveChoices = 0;
+        let totalChoices = 0;
+        let hoveredLetter = null;
+        let isInteracting = false;
+        let time = 0;
+
+        // Letter data - unsent letters
+        const letters = [
+            {
+                x: 0.28,
+                y: 0.35,
+                depth: 0.15,
+                rotation: 0,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "This letter was meant for your father. You wrote it the night before he passed, but never found the courage to leave it by his bedside. The ink has faded, but the words still burn.",
+                question: "How do you seal this letter now?",
+                responses: [
+                    { text: "I forgive us both for words left unspoken", positive: true },
+                    { text: "I carry the weight of silence forever", positive: false },
+                    { text: "I wish I could have one more chance", positive: false }
+                ]
+            },
+            {
+                x: 0.68,
+                y: 0.42,
+                depth: 0.3,
+                rotation: 0,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "This envelope holds words for your childhood friend. You drifted apart without explanation, and this letter tried to bridge that silence. It never left your desk drawer.",
+                question: "What truth can you offer now?",
+                responses: [
+                    { text: "I understand that people grow and paths diverge", positive: true },
+                    { text: "I blame them for abandoning me", positive: false },
+                    { text: "I mourn what we lost and can't reclaim", positive: false }
+                ]
+            },
+            {
+                x: 0.45,
+                y: 0.28,
+                depth: 0.05,
+                rotation: 0,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "Inside is a letter to your younger self, written on your hardest day. You promised to revisit it when things got better, but tucked it away and tried to forget.",
+                question: "What does that younger version of you deserve to hear?",
+                responses: [
+                    { text: "I'm proud of how far you've come", positive: true },
+                    { text: "I'm disappointed in who you became", positive: false },
+                    { text: "You should have been stronger", positive: false }
+                ]
+            },
+            {
+                x: 0.72,
+                y: 0.58,
+                depth: 0.5,
+                rotation: 0,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "A letter to the person you hurt most deeply. You've rewritten it a hundred times, each version trying to justify or explain. None felt true enough to send.",
+                question: "What can you finally acknowledge?",
+                responses: [
+                    { text: "I take responsibility without excuse", positive: true },
+                    { text: "They played their part in what happened", positive: false },
+                    { text: "Some damage cannot be repaired", positive: false }
+                ]
+            },
+            {
+                x: 0.22,
+                y: 0.55,
+                depth: 0.4,
+                rotation: 0,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "This letter is addressed to the love you lost. It speaks of all the moments you wish you'd said 'I love you' instead of staying silent. The envelope is worn from being held but never opened.",
+                question: "How do you honor what was?",
+                responses: [
+                    { text: "With gratitude for the love we shared", positive: true },
+                    { text: "With regret for all I didn't say", positive: false },
+                    { text: "With anger at how it ended", positive: false }
+                ]
+            },
+            {
+                x: 0.52,
+                y: 0.48,
+                depth: 0.25,
+                rotation: 0,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "An unsent letter to the mentor who saw your potential but gave up on you. You wanted to prove them wrong, or maybe prove them right. The letter asks questions that have no answers.",
+                question: "What do you release?",
+                responses: [
+                    { text: "The need for their validation", positive: true },
+                    { text: "The bitterness of being abandoned", positive: false },
+                    { text: "The belief that I could have done better", positive: false }
+                ]
+            }
+        ];
+
+        // Mouse tracking
+        let mouseX = 0;
+        let mouseY = 0;
+        let isOverTextBox = false;
+
+        canvas.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        textOverlay.addEventListener('mouseenter', () => {
+            isOverTextBox = true;
+        });
+
+        textOverlay.addEventListener('mouseleave', () => {
+            isOverTextBox = false;
+            hoveredLetter = null;
+            hideTextBox();
+        });
+
+        // Draw library corridor
+        function drawLibrary() {
+            const w = canvas.width;
+            const h = canvas.height;
+            const vanishX = w * 0.5;
+            const vanishY = h * 0.45;
+
+            time += 0.01;
+
+            // Normalize warmth
+            const warmth = Math.max(0, Math.min(1, (environmentBrightness - 0.15) / 0.85));
+
+            // Background - dusty dark to warm golden
+            // Cold: (18, 20, 28) -> Warm: (220, 190, 140)
+            const bgR = Math.floor(18 + warmth * 202);
+            const bgG = Math.floor(20 + warmth * 170);
+            const bgB = Math.floor(28 + warmth * 112);
+
+            const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+            bgGrad.addColorStop(0, `rgb(${bgR}, ${bgG}, ${bgB})`);
+            bgGrad.addColorStop(1, `rgb(${Math.floor(bgR * 0.8)}, ${Math.floor(bgG * 0.8)}, ${Math.floor(bgB * 0.9)})`);
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, w, h);
+
+            // Floor - dark wood to honey oak
+            // Cold: (22, 20, 25) -> Warm: (160, 120, 80)
+            const floorR = Math.floor(22 + warmth * 138);
+            const floorG = Math.floor(20 + warmth * 100);
+            const floorB = Math.floor(25 + warmth * 55);
+
+            ctx.fillStyle = `rgb(${floorR}, ${floorG}, ${floorB})`;
+            ctx.beginPath();
+            ctx.moveTo(0, h);
+            ctx.lineTo(vanishX - 80, vanishY + 50);
+            ctx.lineTo(vanishX + 80, vanishY + 50);
+            ctx.lineTo(w, h);
+            ctx.closePath();
+            ctx.fill();
+
+            // Floor perspective lines
+            ctx.strokeStyle = `rgba(${floorR - 15}, ${floorG - 15}, ${floorB - 10}, ${0.3 + warmth * 0.3})`;
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 6; i++) {
+                const depth = i / 5;
+                const y = h - (1 - depth) * (h - vanishY - 50);
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(vanishX - 80 + depth * 80, vanishY + 50);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(w, y);
+                ctx.lineTo(vanishX + 80 - depth * 80, vanishY + 50);
+                ctx.stroke();
+            }
+
+            // Left bookshelf
+            // Cold: (25, 22, 30) -> Warm: (140, 110, 75)
+            const shelfR = Math.floor(25 + warmth * 115);
+            const shelfG = Math.floor(22 + warmth * 88);
+            const shelfB = Math.floor(30 + warmth * 45);
+
+            ctx.fillStyle = `rgb(${shelfR}, ${shelfG}, ${shelfB})`;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(w * 0.2, 0);
+            ctx.lineTo(vanishX - 85, vanishY - 30);
+            ctx.lineTo(vanishX - 85, vanishY + 50);
+            ctx.lineTo(0, h);
+            ctx.closePath();
+            ctx.fill();
+
+            // Right bookshelf
+            ctx.beginPath();
+            ctx.moveTo(w, 0);
+            ctx.lineTo(w * 0.8, 0);
+            ctx.lineTo(vanishX + 85, vanishY - 30);
+            ctx.lineTo(vanishX + 85, vanishY + 50);
+            ctx.lineTo(w, h);
+            ctx.closePath();
+            ctx.fill();
+
+            // Books on shelves - become more colorful
+            for (let side = 0; side < 2; side++) {
+                for (let row = 0; row < 8; row++) {
+                    const depth = row / 7;
+                    const shelfY = h * 0.1 + row * (h * 0.1);
+
+                    for (let book = 0; book < 8; book++) {
+                        const bookDepth = depth + book * 0.01;
+
+                        // Book colors become more saturated and warm
+                        const baseHue = (book * 45 + row * 30) % 360;
+                        const saturation = 10 + warmth * 50;
+                        const lightness = 25 + warmth * 35;
+
+                        const bookR = Math.floor(shelfR + warmth * (Math.sin(baseHue) * 80));
+                        const bookG = Math.floor(shelfG + warmth * (Math.cos(baseHue) * 70));
+                        const bookB = Math.floor(shelfB + warmth * 40);
+
+                        const scale = 1 - depth * 0.6;
+                        const bookWidth = 15 * scale;
+                        const bookHeight = 60 * scale;
+
+                        if (side === 0) {
+                            // Left shelf
+                            const x = w * 0.02 + book * bookWidth * 0.8;
+                            ctx.fillStyle = `rgb(${bookR}, ${bookG}, ${bookB})`;
+                            ctx.fillRect(x, shelfY, bookWidth, bookHeight);
+                        } else {
+                            // Right shelf
+                            const x = w * 0.98 - (book + 1) * bookWidth * 0.8;
+                            ctx.fillStyle = `rgb(${bookR}, ${bookG}, ${bookB})`;
+                            ctx.fillRect(x, shelfY, bookWidth, bookHeight);
+                        }
+                    }
+                }
+            }
+
+            // Shelf lines
+            ctx.strokeStyle = `rgba(${shelfR - 20}, ${shelfG - 20}, ${shelfB - 10}, ${0.5 + warmth * 0.3})`;
+            ctx.lineWidth = 3;
+            for (let i = 0; i < 8; i++) {
+                const shelfY = h * 0.1 + i * (h * 0.1);
+                // Left
+                ctx.beginPath();
+                ctx.moveTo(0, shelfY);
+                ctx.lineTo(w * 0.2, shelfY);
+                ctx.stroke();
+                // Right
+                ctx.beginPath();
+                ctx.moveTo(w, shelfY);
+                ctx.lineTo(w * 0.8, shelfY);
+                ctx.stroke();
+            }
+
+            // Distant window - darkness to golden dawn
+            // Cold: (30, 35, 50) -> Warm: (255, 220, 150)
+            const windowR = Math.floor(30 + warmth * 225);
+            const windowG = Math.floor(35 + warmth * 185);
+            const windowB = Math.floor(50 + warmth * 100);
+
+            const windowGrad = ctx.createRadialGradient(vanishX, vanishY - 40, 0, vanishX, vanishY - 40, 100);
+            windowGrad.addColorStop(0, `rgb(${windowR}, ${windowG}, ${windowB})`);
+            windowGrad.addColorStop(1, `rgb(${Math.floor(windowR * 0.6)}, ${Math.floor(windowG * 0.6)}, ${Math.floor(windowB * 0.7)})`);
+            ctx.fillStyle = windowGrad;
+            ctx.fillRect(vanishX - 60, vanishY - 80, 120, 80);
+
+            // Window frame
+            const frameR = Math.floor(shelfR - 10);
+            const frameG = Math.floor(shelfG - 10);
+            const frameB = Math.floor(shelfB - 5);
+            ctx.strokeStyle = `rgb(${frameR}, ${frameG}, ${frameB})`;
+            ctx.lineWidth = 4;
+            ctx.strokeRect(vanishX - 60, vanishY - 80, 120, 80);
+
+            // Window cross
+            ctx.beginPath();
+            ctx.moveTo(vanishX, vanishY - 80);
+            ctx.lineTo(vanishX, vanishY);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(vanishX - 60, vanishY - 40);
+            ctx.lineTo(vanishX + 60, vanishY - 40);
+            ctx.stroke();
+
+            // Light rays from window
+            if (warmth > 0.3) {
+                const rayOpacity = (warmth - 0.3) * 0.4;
+                ctx.strokeStyle = `rgba(${windowR}, ${windowG}, ${windowB}, ${rayOpacity})`;
+                ctx.lineWidth = 80;
+
+                for (let i = 0; i < 5; i++) {
+                    const angle = -0.3 + i * 0.15;
+                    ctx.beginPath();
+                    ctx.moveTo(vanishX, vanishY - 40);
+                    ctx.lineTo(vanishX + Math.sin(angle) * w, vanishY - 40 + Math.cos(angle) * h);
+                    ctx.stroke();
+                }
+            }
+
+            // Dust particles - fade as library clears
+            const dustOpacity = (1 - warmth) * 0.4;
+            if (dustOpacity > 0) {
+                ctx.fillStyle = `rgba(180, 180, 200, ${dustOpacity})`;
+                for (let i = 0; i < 50; i++) {
+                    const x = (Math.sin(i * 0.5 + time * 0.3) * 0.5 + 0.5) * w;
+                    const y = (Math.sin(i * 0.7 + time * 0.2) * 0.5 + 0.5) * h;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        // Draw floating letter
+        function drawLetter(letter) {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            const scale = 1 - letter.depth * 0.5;
+            const x = w * letter.x;
+            const y = h * letter.y + Math.sin(time + letter.depth * 5) * 15 * scale;
+
+            letter.rotation = Math.sin(time * 0.5 + letter.depth * 3) * 0.1;
+
+            let brightness = letter.brightness;
+            if (hoveredLetter === letter && !isInteracting) {
+                brightness = Math.min(brightness + 0.15, 0.95);
+            }
+
+            const warmth = brightness;
+
+            // Envelope color - cold blue to warm golden
+            // Cold: (40, 50, 75) -> Warm: (255, 245, 220)
+            const envR = Math.floor(40 + warmth * 215);
+            const envG = Math.floor(50 + warmth * 195);
+            const envB = Math.floor(75 + warmth * 145);
+
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(letter.rotation);
+
+            const envWidth = 80 * scale;
+            const envHeight = 55 * scale;
+
+            // Glow for bright letters
+            if (brightness > 0.5) {
+                ctx.shadowBlur = 25 + brightness * 45;
+                ctx.shadowColor = `rgba(${envR}, ${envG}, ${envB}, ${0.7 + brightness * 0.3})`;
+            } else if (hoveredLetter === letter && !isInteracting) {
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = `rgba(${envR}, ${envG}, ${envB}, 0.5)`;
+            }
+
+            // Envelope body
+            const bodyOpacity = 0.9 + brightness * 0.1;
+            ctx.fillStyle = `rgba(${envR}, ${envG}, ${envB}, ${bodyOpacity})`;
+            ctx.fillRect(-envWidth / 2, -envHeight / 2, envWidth, envHeight);
+
+            // Envelope flap
+            const flapR = Math.floor(envR * 0.9);
+            const flapG = Math.floor(envG * 0.9);
+            const flapB = Math.floor(envB * 0.95);
+            ctx.fillStyle = `rgba(${flapR}, ${flapG}, ${flapB}, ${bodyOpacity})`;
+            ctx.beginPath();
+            ctx.moveTo(-envWidth / 2, -envHeight / 2);
+            ctx.lineTo(0, 0);
+            ctx.lineTo(envWidth / 2, -envHeight / 2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Envelope border
+            ctx.strokeStyle = `rgba(${flapR - 20}, ${flapG - 20}, ${flapB - 10}, ${0.6 + warmth * 0.3})`;
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(-envWidth / 2, -envHeight / 2, envWidth, envHeight);
+
+            // Wax seal for transformed letters
+            if (brightness > 0.6) {
+                const sealR = Math.floor(200 + warmth * 55);
+                const sealG = Math.floor(150 + warmth * 80);
+                const sealB = Math.floor(80 + warmth * 50);
+
+                ctx.fillStyle = `rgb(${sealR}, ${sealG}, ${sealB})`;
+                ctx.beginPath();
+                ctx.arc(0, envHeight / 4, 8 * scale, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Seal pattern
+                ctx.strokeStyle = `rgba(${sealR - 40}, ${sealG - 40}, ${sealB - 20}, 0.8)`;
+                ctx.lineWidth = 1;
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2;
+                    ctx.beginPath();
+                    ctx.moveTo(0, envHeight / 4);
+                    ctx.lineTo(Math.cos(angle) * 6 * scale, envHeight / 4 + Math.sin(angle) * 6 * scale);
+                    ctx.stroke();
+                }
+            }
+
+            // Extra glow for very bright letters
+            if (brightness > 0.65) {
+                const glowR = Math.min(255, envR + 5);
+                const glowG = Math.min(255, envG + 10);
+                const glowB = Math.min(255, envB + 15);
+                const glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, envWidth * 0.8);
+                glowGrad.addColorStop(0, `rgba(${glowR}, ${glowG}, ${glowB}, ${(brightness - 0.65) * 1.5})`);
+                glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = glowGrad;
+                ctx.fillRect(-envWidth / 2, -envHeight / 2, envWidth, envHeight);
+            }
+
+            ctx.restore();
+        }
+
+        // Check hover
+        function checkHover() {
+            if (isInteracting || isOverTextBox) {
+                return;
+            }
+
+            let foundHover = false;
+            const w = canvas.width;
+            const h = canvas.height;
+
+            for (let letter of letters) {
+                if (letter.interacted) continue;
+
+                const scale = 1 - letter.depth * 0.5;
+                const x = w * letter.x;
+                const y = h * letter.y + Math.sin(time + letter.depth * 5) * 15 * scale;
+
+                const envWidth = 80 * scale;
+                const envHeight = 55 * scale;
+
+                const dx = Math.abs(mouseX - x);
+                const dy = Math.abs(mouseY - y);
+
+                if (dx < envWidth / 2 && dy < envHeight / 2) {
+                    if (hoveredLetter !== letter) {
+                        hoveredLetter = letter;
+                        showTextBox(letter);
+                    }
+                    foundHover = true;
+                    break;
+                }
+            }
+
+            if (!foundHover && hoveredLetter) {
+                hoveredLetter = null;
+                hideTextBox();
+            }
+        }
+
+        // Show text box
+        function showTextBox(letter) {
+            document.getElementById('narrativeText').textContent = letter.narrative;
+            document.getElementById('questionText').textContent = letter.question;
+
+            const responsesContainer = document.getElementById('responsesContainer');
+            responsesContainer.innerHTML = '';
+
+            letter.responses.forEach((response, index) => {
+                const option = document.createElement('div');
+                option.className = 'response-option';
+                option.textContent = response.text;
+                option.addEventListener('click', () => handleResponse(letter, index));
+                responsesContainer.appendChild(option);
+            });
+
+            const w = canvas.width;
+            const h = canvas.height;
+            const scale = 1 - letter.depth * 0.5;
+            const letterX = w * letter.x;
+            const letterY = h * letter.y + Math.sin(time + letter.depth * 5) * 15 * scale;
+
+            let boxX = letterX - 210;
+            let boxY = letterY - 280;
+
+            const textBoxWidth = 420;
+            if (boxX < 20) {
+                boxX = 20;
+            } else if (boxX + textBoxWidth > w - 20) {
+                boxX = w - textBoxWidth - 20;
+            }
+
+            if (boxY < 20) {
+                boxY = 20;
+            }
+
+            textOverlay.style.left = boxX + 'px';
+            textOverlay.style.top = boxY + 'px';
+            textOverlay.classList.add('visible');
+        }
+
+        // Hide text box
+        function hideTextBox() {
+            textOverlay.classList.remove('visible');
+        }
+
+        // Handle response
+        function handleResponse(letter, responseIndex) {
+            isInteracting = true;
+            hideTextBox();
+
+            const response = letter.responses[responseIndex];
+            letter.interacted = true;
+            totalChoices++;
+
+            if (response.positive) {
+                positiveChoices++;
+                letter.brightness = Math.min(letter.brightness + 0.38, 0.92);
+            } else {
+                letter.brightness = Math.max(letter.brightness - 0.12, 0.08);
+            }
+
+            const positiveRatio = positiveChoices / 6;
+            const targetBrightness = 0.15 + (positiveRatio * 0.85);
+
+            const startBrightness = environmentBrightness;
+            const duration = 2500;
+            const startTime = Date.now();
+
+            function animateBrightness() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easeProgress = 1 - Math.pow(1 - progress, 3);
+                environmentBrightness = startBrightness + (targetBrightness - startBrightness) * easeProgress;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateBrightness);
+                } else {
+                    isInteracting = false;
+                }
+            }
+
+            animateBrightness();
+        }
+
+        // Main animation loop
+        function animate() {
+            drawLibrary();
+
+            // Sort letters by depth for proper layering
+            const sortedLetters = [...letters].sort((a, b) => b.depth - a.depth);
+
+            sortedLetters.forEach(letter => {
+                drawLetter(letter);
+            });
+
+            checkHover();
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
