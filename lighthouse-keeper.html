@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Lighthouse Keeper</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: 'Georgia', serif;
+            background: #0a0e1a;
+        }
+
+        #canvas {
+            display: block;
+            cursor: default;
+        }
+
+        #textOverlay {
+            position: absolute;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            max-width: 400px;
+            padding: 20px;
+            background: rgba(15, 20, 30, 0.9);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            color: #b8c5d8;
+            font-size: 14px;
+            line-height: 1.6;
+            pointer-events: none;
+        }
+
+        #textOverlay.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        #textOverlay.visible * {
+            pointer-events: all;
+        }
+
+        .narrative-text {
+            margin-bottom: 15px;
+        }
+
+        .question {
+            margin-top: 10px;
+            margin-bottom: 15px;
+            font-style: italic;
+            color: #d0dae8;
+        }
+
+        .responses {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .response-option {
+            padding: 12px 16px;
+            background: rgba(30, 40, 55, 0.7);
+            border: 1px solid rgba(100, 120, 150, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #c8d4e3;
+            font-size: 13px;
+        }
+
+        .response-option:hover {
+            background: rgba(40, 55, 75, 0.9);
+            border-color: rgba(120, 140, 170, 0.5);
+            transform: translateX(5px);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="textOverlay">
+        <div class="narrative-text" id="narrativeText"></div>
+        <div class="question" id="questionText"></div>
+        <div class="responses" id="responsesContainer"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const textOverlay = document.getElementById('textOverlay');
+
+        // Canvas setup
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Game state
+        let environmentBrightness = 0.15; // Storm to sunrise
+        let positiveChoices = 0;
+        let totalChoices = 0;
+        let hoveredFigure = null;
+        let isInteracting = false;
+
+        // Figure data - people from the past
+        const figures = [
+            {
+                x: 0.2,
+                y: 0.65,
+                scale: 0.85,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "This figure is the friend who betrayed your trust. They stand on the rocks, battered by wind and rain, reaching toward the lighthouse.",
+                question: "How do you respond to their presence in the storm?",
+                responses: [
+                    { text: "I understand we both made mistakes", positive: true },
+                    { text: "I keep them at a distance, forever outside", positive: false },
+                    { text: "They deserve to weather this storm alone", positive: false }
+                ]
+            },
+            {
+                x: 0.75,
+                y: 0.62,
+                scale: 0.9,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "A family member who never understood you stands in the darkness. Years of misunderstanding hang heavy between you.",
+                question: "What do you offer across the divide?",
+                responses: [
+                    { text: "Compassion for our different paths", positive: true },
+                    { text: "Silence and the weight of old wounds", positive: false },
+                    { text: "The same judgment they gave me", positive: false }
+                ]
+            },
+            {
+                x: 0.35,
+                y: 0.58,
+                scale: 0.75,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "The lover who left stands small against the tempest. Their departure carved a space in you that never quite filled.",
+                question: "What remains between you now?",
+                responses: [
+                    { text: "Gratitude for what we shared", positive: true },
+                    { text: "The ghost of what might have been", positive: false },
+                    { text: "Bitterness that won't wash away", positive: false }
+                ]
+            },
+            {
+                x: 0.65,
+                y: 0.7,
+                scale: 0.8,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "The mentor who failed you when you needed them most. They face away, unable to meet your gaze even now.",
+                question: "What do you wish they knew?",
+                responses: [
+                    { text: "I've grown beyond needing their approval", positive: true },
+                    { text: "Their failure defined my limitations", positive: false },
+                    { text: "I can never forgive their absence", positive: false }
+                ]
+            },
+            {
+                x: 0.48,
+                y: 0.55,
+                scale: 0.7,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "A shadowy figure of someone you hurt. They linger, waiting for something you're not sure you can give.",
+                question: "What can you offer them?",
+                responses: [
+                    { text: "Acknowledgment and genuine remorse", positive: true },
+                    { text: "Excuses for why it had to be that way", positive: false },
+                    { text: "Nothing—some things can't be undone", positive: false }
+                ]
+            },
+            {
+                x: 0.15,
+                y: 0.52,
+                scale: 0.68,
+                brightness: 0.18,
+                interacted: false,
+                narrative: "Your younger self stands distant in the storm, looking up at who you've become with questions in their eyes.",
+                question: "What do you tell them?",
+                responses: [
+                    { text: "You did the best you could with what you had", positive: true },
+                    { text: "I'm sorry for the dreams we abandoned", positive: false },
+                    { text: "You should have tried harder", positive: false }
+                ]
+            }
+        ];
+
+        // Mouse tracking
+        let mouseX = 0;
+        let mouseY = 0;
+        let isOverTextBox = false;
+
+        canvas.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        textOverlay.addEventListener('mouseenter', () => {
+            isOverTextBox = true;
+        });
+
+        textOverlay.addEventListener('mouseleave', () => {
+            isOverTextBox = false;
+            hoveredFigure = null;
+            hideTextBox();
+        });
+
+        // Draw lighthouse interior view
+        function drawLighthouseView() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Normalize warmth from environmentBrightness (0.15 to 1.0)
+            const warmth = Math.max(0, Math.min(1, (environmentBrightness - 0.15) / 0.85));
+
+            // Sky - storm to sunrise
+            // Cold storm: (10, 15, 25) -> Warm dawn: (255, 180, 120)
+            const skyR = Math.floor(10 + warmth * 245);
+            const skyG = Math.floor(15 + warmth * 165);
+            const skyB = Math.floor(25 + warmth * 95);
+
+            // Sky gradient
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
+            skyGrad.addColorStop(0, `rgb(${skyR}, ${skyG}, ${skyB})`);
+            skyGrad.addColorStop(1, `rgb(${Math.floor(skyR * 0.6)}, ${Math.floor(skyG * 0.6)}, ${Math.floor(skyB * 0.8)})`);
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, w, h);
+
+            // Rain effect - fades as storm clears
+            const rainIntensity = 1 - warmth;
+            if (rainIntensity > 0) {
+                ctx.strokeStyle = `rgba(180, 200, 220, ${rainIntensity * 0.3})`;
+                ctx.lineWidth = 1;
+                for (let i = 0; i < 100 * rainIntensity; i++) {
+                    const x = Math.random() * w;
+                    const y = (Math.random() * h + Date.now() * 0.5) % h;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x - 3, y + 15);
+                    ctx.stroke();
+                }
+            }
+
+            // Sea - turbulent to calm
+            // Storm: (15, 20, 35) -> Calm: (100, 150, 200)
+            const seaR = Math.floor(15 + warmth * 85);
+            const seaG = Math.floor(20 + warmth * 130);
+            const seaB = Math.floor(35 + warmth * 165);
+
+            const seaGrad = ctx.createLinearGradient(0, h * 0.6, 0, h);
+            seaGrad.addColorStop(0, `rgb(${seaR}, ${seaG}, ${seaB})`);
+            seaGrad.addColorStop(1, `rgb(${Math.floor(seaR * 0.7)}, ${Math.floor(seaG * 0.7)}, ${Math.floor(seaB * 0.9)})`);
+            ctx.fillStyle = seaGrad;
+            ctx.fillRect(0, h * 0.6, w, h * 0.4);
+
+            // Waves - choppy to gentle
+            const waveIntensity = 1 - warmth * 0.7;
+            ctx.strokeStyle = `rgba(${seaR + 30}, ${seaG + 40}, ${seaB + 50}, ${0.5 + warmth * 0.3})`;
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 5; i++) {
+                ctx.beginPath();
+                const baseY = h * 0.6 + i * 40;
+                for (let x = 0; x <= w; x += 20) {
+                    const y = baseY + Math.sin(x * 0.02 + i + Date.now() * 0.001) * 10 * waveIntensity;
+                    if (x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
+            // Rocks - dark to visible
+            // Dark: (20, 22, 30) -> Visible: (80, 75, 70)
+            const rockR = Math.floor(20 + warmth * 60);
+            const rockG = Math.floor(22 + warmth * 53);
+            const rockB = Math.floor(30 + warmth * 40);
+
+            // Left rocks
+            ctx.fillStyle = `rgb(${rockR}, ${rockG}, ${rockB})`;
+            ctx.beginPath();
+            ctx.moveTo(0, h * 0.65);
+            ctx.lineTo(w * 0.25, h * 0.62);
+            ctx.lineTo(w * 0.2, h);
+            ctx.lineTo(0, h);
+            ctx.closePath();
+            ctx.fill();
+
+            // Right rocks
+            ctx.beginPath();
+            ctx.moveTo(w, h * 0.65);
+            ctx.lineTo(w * 0.75, h * 0.62);
+            ctx.lineTo(w * 0.8, h);
+            ctx.lineTo(w, h);
+            ctx.closePath();
+            ctx.fill();
+
+            // Lighthouse beam - grows brighter and warmer
+            const beamR = Math.floor(200 + warmth * 55);
+            const beamG = Math.floor(180 + warmth * 75);
+            const beamB = Math.floor(100 + warmth * 55);
+            const beamOpacity = 0.15 + warmth * 0.25;
+
+            const beamGrad = ctx.createRadialGradient(w * 0.5, h * 0.3, 0, w * 0.5, h * 0.3, w * 0.6);
+            beamGrad.addColorStop(0, `rgba(${beamR}, ${beamG}, ${beamB}, ${beamOpacity})`);
+            beamGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = beamGrad;
+            ctx.fillRect(0, 0, w, h);
+
+            // Window frame (interior perspective)
+            const frameR = Math.floor(40 + warmth * 80);
+            const frameG = Math.floor(35 + warmth * 75);
+            const frameB = Math.floor(30 + warmth * 60);
+
+            ctx.strokeStyle = `rgb(${frameR}, ${frameG}, ${frameB})`;
+            ctx.lineWidth = 20;
+            ctx.strokeRect(w * 0.05, h * 0.05, w * 0.9, h * 0.9);
+
+            // Window dividers
+            ctx.lineWidth = 8;
+            // Vertical
+            ctx.beginPath();
+            ctx.moveTo(w * 0.5, h * 0.05);
+            ctx.lineTo(w * 0.5, h * 0.95);
+            ctx.stroke();
+            // Horizontal
+            ctx.beginPath();
+            ctx.moveTo(w * 0.05, h * 0.5);
+            ctx.lineTo(w * 0.95, h * 0.5);
+            ctx.stroke();
+        }
+
+        // Draw a figure on the rocks
+        function drawFigure(figure) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const x = w * figure.x;
+            const y = h * figure.y;
+            const baseSize = 80 * figure.scale;
+
+            let brightness = figure.brightness;
+            if (hoveredFigure === figure && !isInteracting) {
+                brightness = Math.min(brightness + 0.15, 0.95);
+            }
+
+            const warmth = brightness;
+
+            // Transform from threatening dark to peaceful glowing
+            // Cold: (25, 30, 45) -> Warm: (255, 245, 230)
+            const r = Math.floor(25 + warmth * 230);
+            const g = Math.floor(30 + warmth * 215);
+            const b = Math.floor(45 + warmth * 185);
+
+            ctx.save();
+            ctx.translate(x, y);
+
+            // Glow effect for bright figures
+            if (brightness > 0.5) {
+                ctx.shadowBlur = 30 + brightness * 50;
+                ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.6 + brightness * 0.4})`;
+            } else if (hoveredFigure === figure && !isInteracting) {
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 0.4)`;
+            }
+
+            const bodyOpacity = 0.85 + brightness * 0.15;
+
+            // Body
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${bodyOpacity})`;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, baseSize * 0.28, baseSize * 0.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(0, -baseSize * 0.6, baseSize * 0.22, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Arms
+            const armR = Math.floor(r * 0.95);
+            const armG = Math.floor(g * 0.95);
+            const armB = Math.floor(b * 0.95);
+            ctx.fillStyle = `rgba(${armR}, ${armG}, ${armB}, ${bodyOpacity * 0.85})`;
+
+            ctx.beginPath();
+            ctx.ellipse(-baseSize * 0.25, baseSize * 0.1, baseSize * 0.13, baseSize * 0.38, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.ellipse(baseSize * 0.25, baseSize * 0.1, baseSize * 0.13, baseSize * 0.38, 0.3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Extra glow for very bright figures
+            if (brightness > 0.65) {
+                const glowR = Math.min(255, r + 5);
+                const glowG = Math.min(255, g + 10);
+                const glowB = Math.min(255, b + 15);
+                const glowGrad = ctx.createRadialGradient(0, -baseSize * 0.2, 0, 0, -baseSize * 0.2, baseSize * 0.7);
+                glowGrad.addColorStop(0, `rgba(${glowR}, ${glowG}, ${glowB}, ${(brightness - 0.65) * 1.2})`);
+                glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = glowGrad;
+                ctx.beginPath();
+                ctx.arc(0, -baseSize * 0.2, baseSize * 0.7, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Dark figures look more threatening
+            if (brightness < 0.25 && figure.interacted) {
+                ctx.globalAlpha = 0.6;
+                const darkR = Math.floor(r * 0.5);
+                const darkG = Math.floor(g * 0.5);
+                const darkB = Math.floor(b * 1.2);
+                ctx.fillStyle = `rgba(${darkR}, ${darkG}, ${darkB}, 0.8)`;
+                ctx.beginPath();
+                ctx.ellipse(0, baseSize * 0.15, baseSize * 0.22, baseSize * 0.55, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        // Check hover
+        function checkHover() {
+            if (isInteracting || isOverTextBox) {
+                return;
+            }
+
+            let foundHover = false;
+            const w = canvas.width;
+            const h = canvas.height;
+
+            for (let figure of figures) {
+                if (figure.interacted) continue;
+
+                const x = w * figure.x;
+                const y = h * figure.y;
+                const size = 80 * figure.scale;
+
+                const dx = mouseX - x;
+                const dy = mouseY - y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < size * 0.6) {
+                    if (hoveredFigure !== figure) {
+                        hoveredFigure = figure;
+                        showTextBox(figure);
+                    }
+                    foundHover = true;
+                    break;
+                }
+            }
+
+            if (!foundHover && hoveredFigure) {
+                hoveredFigure = null;
+                hideTextBox();
+            }
+        }
+
+        // Show text box
+        function showTextBox(figure) {
+            document.getElementById('narrativeText').textContent = figure.narrative;
+            document.getElementById('questionText').textContent = figure.question;
+
+            const responsesContainer = document.getElementById('responsesContainer');
+            responsesContainer.innerHTML = '';
+
+            figure.responses.forEach((response, index) => {
+                const option = document.createElement('div');
+                option.className = 'response-option';
+                option.textContent = response.text;
+                option.addEventListener('click', () => handleResponse(figure, index));
+                responsesContainer.appendChild(option);
+            });
+
+            const w = canvas.width;
+            const h = canvas.height;
+            const figureX = w * figure.x;
+            const figureY = h * figure.y;
+
+            let boxX = figureX - 200;
+            let boxY = figureY - 250;
+
+            const textBoxWidth = 400;
+            if (boxX < 20) {
+                boxX = 20;
+            } else if (boxX + textBoxWidth > w - 20) {
+                boxX = w - textBoxWidth - 20;
+            }
+
+            if (boxY < 20) {
+                boxY = 20;
+            }
+
+            textOverlay.style.left = boxX + 'px';
+            textOverlay.style.top = boxY + 'px';
+            textOverlay.classList.add('visible');
+        }
+
+        // Hide text box
+        function hideTextBox() {
+            textOverlay.classList.remove('visible');
+        }
+
+        // Handle response
+        function handleResponse(figure, responseIndex) {
+            isInteracting = true;
+            hideTextBox();
+
+            const response = figure.responses[responseIndex];
+            figure.interacted = true;
+            totalChoices++;
+
+            if (response.positive) {
+                positiveChoices++;
+                figure.brightness = Math.min(figure.brightness + 0.35, 0.9);
+            } else {
+                figure.brightness = Math.max(figure.brightness - 0.1, 0.08);
+            }
+
+            const positiveRatio = positiveChoices / 6;
+            const targetBrightness = 0.15 + (positiveRatio * 0.85);
+
+            const startBrightness = environmentBrightness;
+            const duration = 2500;
+            const startTime = Date.now();
+
+            function animateBrightness() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easeProgress = 1 - Math.pow(1 - progress, 3);
+                environmentBrightness = startBrightness + (targetBrightness - startBrightness) * easeProgress;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateBrightness);
+                } else {
+                    isInteracting = false;
+                }
+            }
+
+            animateBrightness();
+        }
+
+        // Main animation loop
+        function animate() {
+            drawLighthouseView();
+
+            figures.forEach(figure => {
+                drawFigure(figure);
+            });
+
+            checkHover();
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
